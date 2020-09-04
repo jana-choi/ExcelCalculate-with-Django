@@ -3,6 +3,7 @@ from django.http import HttpResponse
 from random import *
 from .models import *
 from sendEmail.views import *
+import hashlib
 
 # Create your views here.
 def index(request):
@@ -19,18 +20,25 @@ def join(request):
     name = request.POST["signupName"]
     email = request.POST["signupEmail"]
     pw = request.POST["signupPW"]
-    user = User(user_name = name, user_email = email, user_password = pw)
+    # pw encryption
+    encoded_pw = pw.encode()
+    encrypted_pw = hashlib.sha256(encoded_pw).hexdigest()
+    user = User(user_name = name, user_email = email, user_password = encrypted_pw)
     user.save()
     code = randint(1000, 9999)
+    print("*** verify code:", code)
     response = redirect("main_verifyCode")
     response.set_cookie("code", code)
     response.set_cookie("user_id", user.id)
+    # return response # 이메일 발송 스킵
     # 이메일 발송 함수 호출
     send_result = send(email, code)
     if send_result:
         return response
     else:
-        return HttpResponse("이메일 발송에 실패했습니다.")
+        content = {"message": "이메일 발송에 실패했습니다."}
+        return render(request, "main/error.html", content)
+        # return HttpResponse("이메일 발송에 실패했습니다.")
 
 def signin(request):
     return render(request, "main/signin.html")
@@ -42,12 +50,17 @@ def login(request):
         user = User.objects.get(user_email = loginEmail)
     except:
         return redirect("main_loginFail")
-    if user.user_password == loginPW:
+    # 사용자가 입력한 PW 암호화
+    encoded_loginPW = loginPW.encode()
+    encrypted_loginPW = hashlib.sha256(encoded_loginPW).hexdigest()
+    if user.user_password == encrypted_loginPW:
         request.session["user_name"] = user.user_name
         request.session["user_email"] = user.user_email
         return redirect("main_index")
     else:
-        return redirect("main_loginFail")
+        content = {"message": "아이디 또는 비밀번호가 틀렸습니다. 로그인을 다시 시도해 주세요."}
+        return render(request, "main/error.html", content)
+        # return redirect("main_loginFail")
 
 def loginFail(request):
     return render(request, "main/loginFail.html")
